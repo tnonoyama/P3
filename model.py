@@ -41,6 +41,20 @@ train_samples, validation_samples = train_test_split(samples, test_size=0.2)
 import sklearn
 
 
+# In[8]:
+
+#Brightness augmentation
+def augment_brightness_camera_images(image):
+    image1 = cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+    image1 = np.array(image1, dtype = np.float64)
+    random_bright = .5+np.random.uniform()
+    image1[:,:,2] = image1[:,:,2]*random_bright
+    image1[:,:,2][image1[:,:,2]>255]  = 255
+    image1 = np.array(image1, dtype = np.uint8)
+    image1 = cv2.cvtColor(image1,cv2.COLOR_HSV2BGR)
+    return image1
+
+
 # In[9]:
 
 #Horizontal and vertical shift
@@ -96,7 +110,18 @@ def generator(samples, batch_size=32):
                     angles.append(steering_center)
                     angles.append(steering_left)
                     angles.append(steering_right)
-                    
+            #Make the brightness augmented images
+            brightness_augmented_images, brightness_augmented_angles = [], []
+            for image, angle in zip(images, angles):
+                brightness_augmented_image = augment_brightness_camera_images(image)
+                brightness_augmented_images.append(brightness_augmented_image)
+                brightness_augmented_angles.append(angle)
+            
+            #Add the list of brightness_augmented_images and brightness_augmented_angles to the list of images and angles
+            images.extend(brightness_augmented_images)
+            angles.extend(brightness_augmented_angles)
+            
+            #Make the shifted images
             shifted_images, shifted_angles = [],[]
             for image, angle in zip(images, angles):
                 shifted_images.append(image)
@@ -105,7 +130,7 @@ def generator(samples, batch_size=32):
                 shifted_images.append(shifted_image)
                 shifted_angles.append(shifted_angle)
 
-                #Make the flipped images and add them to the training data set
+            #Make the flipped images and add them to the training data set
             augmented_images, augmented_angles = [],[]
             for image, angle in zip(shifted_images, shifted_angles):
                 augmented_images.append(image)
@@ -113,7 +138,6 @@ def generator(samples, batch_size=32):
                 augmented_images.append(cv2.flip(image, 1))
                 augmented_angles.append(angle * -1.0)
                 
-            # trim image to only see section with road
             X_train = np.array(augmented_images)
             y_train = np.array(augmented_angles)
             yield sklearn.utils.shuffle(X_train, y_train)
@@ -138,17 +162,17 @@ from keras.layers.pooling import MaxPooling2D
 # In[13]:
 
 model = Sequential()
-#Cropping the images from the top to 70 rows and from the bottom to 25 rows.
-model.add(Cropping2D(cropping=((70,25), (0,0)), input_shape=(160,320,3)))
+#Cropping the images from the top to 70 rows, from the bottom to 25 rows.
+model.add(Cropping2D(cropping=((70, 25), (0, 0)), input_shape=(160, 320, 3)))
 #Normalization
-model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(65, 320, 3)))
+model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(64, 64, 3)))
 ##Cropping the images from the top to 70 rows and from the bottom to 25 rows.
 #model.add(Cropping2D(cropping=((70,25), (0,0)), input_shape=(3,160,320)))
 #1st convolution layer, Input = 65x320x3, Output = 31x158x24, kernel = 5x5, strides = 2x2, padding=Valid
 #Actovate function layer, activate function = RELU
 model.add(Convolution2D(nb_filter=24, nb_row=5, nb_col=5, subsample = (2, 2), activation='relu'))
-##1st Dropout layer, keep probability = 0.5
-#model.add(Dropout(0.5))
+#Dropout layer, keep probability = 0.5
+model.add(Dropout(0.5))
 #2nd convolution layer, Input = 31x158x24, Output = 14x77x36, kernel = 5x5, strides = 2x2, padding=Valid
 #Activate function layer, activate function = RELU
 model.add(Convolution2D(nb_filter=36, nb_row=5, nb_col=5, subsample = (2, 2), activation='relu'))
@@ -181,4 +205,9 @@ model.fit_generator(train_generator, samples_per_epoch= len(train_samples),
 # In[15]:
 
 model.save('model.h5')
+
+
+# In[ ]:
+
+
 
